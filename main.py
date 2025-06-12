@@ -14,7 +14,10 @@ from opensearch_utils import (
 )
 from openai_utils import get_embedding
 
-from routers import opensearch
+# Import database models and create tables
+from database_models import create_tables, get_db
+
+from routers import opensearch, consultation
 
 load_dotenv()
 
@@ -23,8 +26,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="Memo Carte Retriever API",
-    description="Vector and Hybrid Search API for Japanese Memo Carte Data using OpenAI Embeddings",
+    title="Vetty AI - Pet Health Consultation API",
+    description="AI-powered pet health consultation system with vector search capabilities using OpenAI Embeddings",
     version="1.0.0"
 )
 
@@ -37,22 +40,29 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Include routers
 app.include_router(opensearch.router, tags=["opensearch"])
+app.include_router(consultation.router, tags=["consultation"])
 
 # OpenAI configuration
 OPENAI_EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
 EMBEDDING_DIMENSION = int(os.getenv("EMBEDDING_DIMENSION", 1536))
 
-
-
 # Initialize OpenSearch client using your configuration
 opensearch_client = create_opensearch_client()
-
 
 @app.on_event("startup")
 async def startup_event():
     """Initialize the application"""
-    logger.info("Initializing Memo Carte Retriever API with OpenAI Embeddings...")
+    logger.info("Initializing Vetty AI Pet Health Consultation API...")
+    
+    # Create database tables
+    try:
+        create_tables()
+        logger.info("Database tables created/verified successfully")
+    except Exception as e:
+        logger.error(f"Failed to create database tables: {e}")
+        raise RuntimeError("Failed to initialize database")
     
     # Verify OpenAI API key
     try:
@@ -71,16 +81,23 @@ async def startup_event():
         logger.error(f"Failed to create OpenSearch indexes: {e}")
         raise RuntimeError("Failed to create OpenSearch indexes")
     
-    logger.info("Memo Carte Retriever API initialized successfully")
+    logger.info("Vetty AI Pet Health Consultation API initialized successfully")
 
 @app.get("/")
 async def root():
     return {
-        "message": "Memo Carte Retriever API with OpenAI Embeddings",
+        "message": "Vetty AI - Pet Health Consultation API with OpenAI Embeddings",
         "status": "running",
         "embedding_model": OPENAI_EMBEDDING_MODEL,
         "embedding_dimension": EMBEDDING_DIMENSION,
-        "available_indexes": [T_MEMO_CARTE_INDEX, JAPANESE_MEDICAL_DOCUMENTS_INDEX]
+        "available_indexes": [T_MEMO_CARTE_INDEX, JAPANESE_MEDICAL_DOCUMENTS_INDEX],
+        "features": [
+            "Pet health consultation workflow",
+            "AI-powered symptom analysis", 
+            "Vector-based medical document search",
+            "Hybrid search capabilities",
+            "Question template management"
+        ]
     }
 
 @app.get("/health")
@@ -97,22 +114,25 @@ async def health_check():
         except Exception as e:
             openai_status = f"error: {str(e)}"
         
+        # Check database connection
+        try:
+            from database_models import SessionLocal
+            db = SessionLocal()
+            db.execute("SELECT 1")
+            db.close()
+            database_status = "connected"
+        except Exception as e:
+            database_status = f"error: {str(e)}"
+        
         return {
             "status": "healthy",
             "opensearch": "connected",
             "opensearch_version": opensearch_info.get("version", {}).get("number", "unknown"),
             "openai": openai_status,
-            "embedding_model": OPENAI_EMBEDDING_MODEL,
-            "embedding_dimension": EMBEDDING_DIMENSION,
-            "indexes": {
-                "t_memo_carte": get_index_info(opensearch_client, T_MEMO_CARTE_INDEX),
-                "japanese_medical_documents": get_index_info(opensearch_client, JAPANESE_MEDICAL_DOCUMENTS_INDEX)
-            }
+            "database": database_status,
         }
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Service unhealthy: {str(e)}")
-
-
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

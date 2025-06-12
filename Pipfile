@@ -1,0 +1,20 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+httpx = "*"
+sqlalchemy = "*"
+psycopg2-binary = "*"
+fastapi = {extras = ["standard"], version = "*"}
+uvicorn = "*"
+python-dotenv = "*"
+openai = "*"
+opensearch-py = "*"
+pydantic = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.13"
